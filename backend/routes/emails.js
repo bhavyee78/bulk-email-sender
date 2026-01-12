@@ -258,15 +258,15 @@ router.get('/history', (req, res) => {
         // Get total count
         const { total } = db.prepare('SELECT COUNT(*) as total FROM sent_emails').get();
         
-        // Calculate overall stats
+        // Calculate overall stats - count emails with at least 1 open
         const stats = db.prepare(`
-            SELECT 
-                COUNT(*) as total_sent,
+            SELECT
+                COUNT(DISTINCT se.id) as total_sent,
                 COUNT(DISTINCT CASE WHEN eo.id IS NOT NULL THEN se.id END) as unique_opens
             FROM sent_emails se
             LEFT JOIN email_opens eo ON se.id = eo.sent_email_id
         `).get();
-        
+
         res.json({
             success: true,
             emails: emails.map(e => ({
@@ -296,7 +296,7 @@ router.get('/history', (req, res) => {
             stats: {
                 totalSent: stats.total_sent,
                 uniqueOpens: stats.unique_opens,
-                openRate: stats.total_sent > 0 
+                openRate: stats.total_sent > 0
                     ? ((stats.unique_opens / stats.total_sent) * 100).toFixed(2) + '%'
                     : '0%'
             }

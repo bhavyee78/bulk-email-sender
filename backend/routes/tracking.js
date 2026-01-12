@@ -53,14 +53,13 @@ router.get('/open/:trackingId', (req, res) => {
                 const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
                 const userAgent = req.get('User-Agent') || 'unknown';
 
-                // Check if this is a duplicate within 30 seconds (prevent email client pre-fetches)
+                // Check if this is a duplicate within 5 minutes (prevent email client pre-fetches/auto-reloads)
                 const recentOpen = db.prepare(`
                     SELECT id FROM email_opens
                     WHERE sent_email_id = ?
                     AND ip_address = ?
-                    AND user_agent = ?
-                    AND opened_at > datetime('now', '-30 seconds')
-                `).get(sentEmail.id, ipAddress, userAgent);
+                    AND opened_at > datetime('now', '-5 minutes')
+                `).get(sentEmail.id, ipAddress);
 
                 if (!recentOpen) {
                     // Record the open

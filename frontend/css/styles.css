@@ -1213,3 +1213,12 @@ input[type="checkbox"] {
     padding: 8px 16px;
     font-size: 13px;
 }
+
+/* Analytics cards */
+.analytics-card {
+    background: var(--bg-card);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+}

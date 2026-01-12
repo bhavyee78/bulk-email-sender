@@ -1,0 +1,65 @@
+# Environment files (NEVER COMMIT!)
+.env
+.env.local
+.env.production
+*.env
+.env.example
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+database/
+
+# Dependencies
+node_modules/
+
+# Uploads (temporary files)
+uploads/
+*.xlsx
+*.xls
+*.csv
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build files
+dist/
+build/
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# AWS Credentials (extra safety)
+*credentials*
+*secret*
+*aws-config*
+
+# Private keys and certificates
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+
+# Backup files
+*.bak
+*.backup
+*~

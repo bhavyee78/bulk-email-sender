@@ -176,7 +176,12 @@ app.get('/api/config/check', (req, res) => {
 
 // Serve frontend for all other routes (SPA support)
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    // Serve login page for root, dashboard for authenticated users
+    if (req.path === '/' && !req.session?.user) {
+        res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    } else {
+        res.sendFile(path.join(__dirname, '../frontend/dashboard.html'));
+    }
 });
 
 // ===========================================

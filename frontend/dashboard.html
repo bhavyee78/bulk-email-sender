@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Email Sender</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">📧</span>
+                <span class="logo-text">Bulk Mailer</span>
+            </div>
+            <div class="header-right">
+                <div class="quota-display" id="quotaDisplay">
+                    <span class="quota-label">Today's Quota:</span>
+                    <span class="quota-value" id="quotaValue">Loading...</span>
+                    <span class="quota-bar-container">
+                        <span class="quota-bar" id="quotaBar"></span>
+                    </span>
+                </div>
+                <div class="user-menu">
+                    <span class="user-name" id="userName">👤 User</span>
+                    <button class="btn btn-outline btn-sm" id="logoutBtn">
+                        🚪 Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="upload">
+                <span class="tab-icon">📁</span>
+                Upload Contacts
+            </button>
+            <button class="tab-btn" data-tab="compose">
+                <span class="tab-icon">✍️</span>
+                Compose Email
+            </button>
+            <button class="tab-btn" data-tab="tracking">
+                <span class="tab-icon">📊</span>
+                Tracking
+            </button>
+        </nav>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+            <!-- Upload Tab -->
+            <section id="upload-tab" class="tab-panel active">
+                <div class="panel-header">
+                    <h2>Upload Contacts</h2>
+                    <div class="panel-actions">
+                        <a href="/api/contacts/sample/xlsx" class="btn btn-outline btn-sm">
+                            ⬇️ Download Sample Excel
+                        </a>
+                        <a href="/api/contacts/sample/csv" class="btn btn-outline btn-sm">
+                            ⬇️ Download Sample CSV
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Upload Area -->
+                <div class="upload-section">
+                    <div class="upload-dropzone" id="uploadDropzone">
+                        <div class="dropzone-content">
+                            <div class="dropzone-icon">📄</div>
+                            <p class="dropzone-text">Drag & drop your Excel or CSV file here</p>
+                            <p class="dropzone-subtext">or click to browse</p>
+                            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                        </div>
+                    </div>
+                    <div class="upload-info">
+                        <p>Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code></p>
+                        <p>Optional: <code>company_name</code></p>
+                    </div>
+                </div>
+
+                <!-- Upload Progress -->
+                <div class="upload-progress hidden" id="uploadProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="uploadProgressFill"></div>
+                    </div>
+                    <p class="progress-text" id="uploadProgressText">Uploading...</p>
+                </div>
+
+                <!-- Upload Results -->
+                <div class="upload-results hidden" id="uploadResults">
+                    <div class="result-stats">
+                        <div class="stat-item stat-success">
+                            <span class="stat-value" id="statInserted">0</span>
+                            <span class="stat-label">Imported</span>
+                        </div>
+                        <div class="stat-item stat-warning">
+                            <span class="stat-value" id="statSkipped">0</span>
+                            <span class="stat-label">Skipped</span>
+                        </div>
+                        <div class="stat-item stat-error">
+                            <span class="stat-value" id="statInvalid">0</span>
+                            <span class="stat-label">Invalid</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contacts Table -->
+                <div class="table-section">
+                    <div class="table-header">
+                        <h3>Contacts <span class="contact-count" id="contactCount">(0)</span></h3>
+                        <div class="table-actions">
+                            <input type="text" class="search-input" id="contactSearch" placeholder="Search contacts...">
+                            <button class="btn btn-danger btn-sm" id="deleteSelectedBtn" disabled>
+                                🗑️ Delete Selected
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table" id="contactsTable">
+                            <thead>
+                                <tr>
+                                    <th class="col-checkbox">
+                                        <input type="checkbox" id="selectAllContacts">
+                                    </th>
+                                    <th>First Name</th>
+                                    <th>Last Name</th>
+                                    <th>Email</th>
+                                    <th>Company</th>
+                                    <th class="col-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="contactsTableBody">
+                                <tr class="empty-row">
+                                    <td colspan="6">No contacts yet. Upload a file to get started.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-pagination" id="contactsPagination"></div>
+                </div>
+            </section>
+
+            <!-- Compose Tab -->
+            <section id="compose-tab" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Compose Email</h2>
+                </div>
+
+                <div class="compose-layout">
+                    <!-- Recipients Section -->
+                    <div class="compose-section">
+                        <h3>Recipients</h3>
+                        <div class="recipients-info" id="recipientsInfo">
+                            <span class="recipient-count">0 contacts selected</span>
+                            <button class="btn btn-outline btn-sm" id="selectRecipientsBtn">
+                                Select Recipients
+                            </button>
+                        </div>
+                        
+                        <!-- Recipients Modal will be shown when selecting -->
+                        <div class="selected-recipients" id="selectedRecipientsList"></div>
+                    </div>
+
+                    <!-- Subject Section -->
+                    <div class="compose-section">
+                        <h3>Subject Line</h3>
+                        <div class="variable-helper">
+                            <span>Insert variable:</span>
+                            <button class="var-btn" data-var="{first_name}">{first_name}</button>
+                            <button class="var-btn" data-var="{last_name}">{last_name}</button>
+                            <button class="var-btn" data-var="{company_name}">{company_name}</button>
+                        </div>
+                        <input type="text" class="subject-input" id="emailSubject" 
+                               placeholder="Hi {first_name}, check this out!">
+                    </div>
+
+                    <!-- Body Section -->
+                    <div class="compose-section">
+                        <h3>Email Body (HTML)</h3>
+                        <div class="variable-helper">
+                            <span>Insert variable:</span>
+                            <button class="var-btn" data-var="{first_name}">{first_name}</button>
+                            <button class="var-btn" data-var="{last_name}">{last_name}</button>
+                            <button class="var-btn" data-var="{company_name}">{company_name}</button>
+                        </div>
+                        <textarea class="body-input" id="emailBody" rows="12" 
+                                  placeholder="<p>Hello {first_name},</p>
+
+<p>I hope this email finds you well at {company_name}.</p>
+
+<p>Best regards,<br>Your Name</p>"></textarea>
+                    </div>
+
+                    <!-- Preview Section -->
+                    <div class="compose-section">
+                        <h3>Preview</h3>
+                        <div class="preview-controls">
+                            <select id="previewContact" class="preview-select">
+                                <option value="">Select a contact to preview</option>
+                            </select>
+                        </div>
+                        <div class="email-preview" id="emailPreview">
+                            <div class="preview-subject" id="previewSubject">Subject will appear here</div>
+                            <div class="preview-body" id="previewBody">Email body will appear here</div>
+                        </div>
+                    </div>
+
+                    <!-- Send Section -->
+                    <div class="compose-section send-section">
+                        <div class="send-summary" id="sendSummary">
+                            <p>Ready to send to <strong id="sendCount">0</strong> recipients</p>
+                        </div>
+                        <button class="btn btn-primary btn-lg" id="sendEmailsBtn" disabled>
+                            📤 Send Emails
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tracking Tab -->
+            <section id="tracking-tab" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Email Tracking</h2>
+                    <div class="panel-actions">
+                        <button class="btn btn-outline btn-sm" id="refreshTrackingBtn">
+                            🔄 Refresh
+                        </button>
+                        <a href="/api/emails/export" class="btn btn-outline btn-sm">
+                            📥 Export CSV
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Stats Overview -->
+                <div class="tracking-stats">
+                    <div class="stat-card">
+                        <div class="stat-card-value" id="statTotalSent">0</div>
+                        <div class="stat-card-label">Total Sent</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-value" id="statUniqueOpens">0</div>
+                        <div class="stat-card-label">Unique Opens</div>
+                    </div>
+                    <div class="stat-card stat-highlight">
+                        <div class="stat-card-value" id="statOpenRate">0%</div>
+                        <div class="stat-card-label">Open Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-value" id="statAvgTimeToOpen">-</div>
+                        <div class="stat-card-label">Avg Time to Open</div>
+                    </div>
+                </div>
+
+                <!-- Analytics Section -->
+                <div class="analytics-section" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
+                    <div class="analytics-card">
+                        <h3 style="font-size: 16px; margin-bottom: 12px;">📱 Device Breakdown</h3>
+                        <div id="deviceBreakdown" style="font-size: 14px; color: var(--text-muted);">Loading...</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3 style="font-size: 16px; margin-bottom: 12px;">📧 Email Clients</h3>
+                        <div id="clientBreakdown" style="font-size: 14px; color: var(--text-muted);">Loading...</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3 style="font-size: 16px; margin-bottom: 12px;">⏰ Best Open Times</h3>
+                        <div id="bestOpenTimes" style="font-size: 14px; color: var(--text-muted);">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Tracking Table -->
+                <div class="table-section">
+                    <div class="table-header">
+                        <h3>Sent Emails</h3>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table" id="trackingTable">
+                            <thead>
+                                <tr>
+                                    <th>Recipient</th>
+                                    <th>Email</th>
+                                    <th>Company</th>
+                                    <th>Subject</th>
+                                    <th>Sent At</th>
+                                    <th>Status</th>
+                                    <th>Opens</th>
+                                    <th>Last Opened</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trackingTableBody">
+                                <tr class="empty-row">
+                                    <td colspan="8">No emails sent yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-pagination" id="trackingPagination"></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Recipients Selection Modal -->
+    <div class="modal" id="recipientsModal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select Recipients</h3>
+                <button class="modal-close" id="closeRecipientsModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-search">
+                    <input type="text" id="recipientSearch" placeholder="Search contacts...">
+                </div>
+                <div class="modal-select-all">
+                    <label>
+                        <input type="checkbox" id="selectAllRecipients">
+                        Select All
+                    </label>
+                </div>
+                <div class="recipients-list" id="recipientsList"></div>
+            </div>
+            <div class="modal-footer">
+                <span class="selected-count" id="modalSelectedCount">0 selected</span>
+                <button class="btn btn-outline" id="cancelRecipientsBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmRecipientsBtn">Confirm Selection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Send Progress Modal -->
+    <div class="modal" id="sendProgressModal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3>Sending Emails</h3>
+            </div>
+            <div class="modal-body">
+                <div class="send-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="sendProgressFill"></div>
+                    </div>
+                    <p class="progress-text" id="sendProgressText">Preparing to send...</p>
+                </div>
+                <div class="send-results hidden" id="sendResults">
+                    <div class="result-icon" id="sendResultIcon">✅</div>
+                    <p class="result-message" id="sendResultMessage"></p>
+                    <div class="result-details" id="sendResultDetails"></div>
+                </div>
+            </div>
+            <div class="modal-footer hidden" id="sendResultsFooter">
+                <button class="btn btn-primary" id="closeSendModalBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/upload.js"></script>
+    <script src="js/contacts.js"></script>
+    <script src="js/composer.js"></script>
+    <script src="js/tracking.js"></script>
+</body>
+</html>

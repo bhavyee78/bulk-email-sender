@@ -10,18 +10,22 @@
 
 function initTracking() {
     const refreshBtn = document.getElementById('refreshTrackingBtn');
-    
+
     refreshBtn.addEventListener('click', () => {
         loadTrackingData();
+        loadAnalytics();
         Toast.info('Refreshed', 'Tracking data updated');
     });
+
+    // Load analytics on init
+    loadAnalytics();
 }
 
 async function loadTrackingData() {
     try {
         // Load history
         const historyData = await API.get('/emails/history?limit=50');
-        
+
         if (historyData.success) {
             renderTrackingStats(historyData.stats);
             renderTrackingTable(historyData.emails);
@@ -29,6 +33,53 @@ async function loadTrackingData() {
         }
     } catch (error) {
         Toast.error('Failed to load tracking data', error.message);
+    }
+}
+
+async function loadAnalytics() {
+    try {
+        const data = await API.get('/track/summary');
+
+        if (data.success) {
+            const { summary } = data;
+
+            // Update avg time to open
+            if (summary.overall.avgTimeToOpen) {
+                document.getElementById('statAvgTimeToOpen').textContent = summary.overall.avgTimeToOpen + ' min';
+            }
+
+            // Render device breakdown
+            const deviceDiv = document.getElementById('deviceBreakdown');
+            if (summary.deviceBreakdown && summary.deviceBreakdown.length > 0) {
+                deviceDiv.innerHTML = summary.deviceBreakdown
+                    .map(d => `<div style="margin: 4px 0;">${d.device_type}: <strong>${d.count}</strong></div>`)
+                    .join('');
+            } else {
+                deviceDiv.innerHTML = 'No data yet';
+            }
+
+            // Render client breakdown
+            const clientDiv = document.getElementById('clientBreakdown');
+            if (summary.clientBreakdown && summary.clientBreakdown.length > 0) {
+                clientDiv.innerHTML = summary.clientBreakdown
+                    .map(c => `<div style="margin: 4px 0;">${c.email_client}: <strong>${c.count}</strong></div>`)
+                    .join('');
+            } else {
+                clientDiv.innerHTML = 'No data yet';
+            }
+
+            // Render best open times
+            const timesDiv = document.getElementById('bestOpenTimes');
+            if (summary.bestOpenTimes && summary.bestOpenTimes.length > 0) {
+                timesDiv.innerHTML = summary.bestOpenTimes
+                    .map(t => `<div style="margin: 4px 0;">${t.hour}:00 - ${parseInt(t.hour)+1}:00: <strong>${t.count} opens</strong></div>`)
+                    .join('');
+            } else {
+                timesDiv.innerHTML = 'No data yet';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load analytics:', error);
     }
 }
 

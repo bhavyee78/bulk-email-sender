@@ -76,6 +76,24 @@ function initializeDatabase() {
             opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             ip_address TEXT,
             user_agent TEXT,
+            country TEXT,
+            city TEXT,
+            device_type TEXT,
+            email_client TEXT,
+            FOREIGN KEY (sent_email_id) REFERENCES sent_emails(id)
+        )
+    `);
+
+    // Link click tracking table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS link_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sent_email_id INTEGER NOT NULL,
+            tracking_id TEXT NOT NULL,
+            link_url TEXT NOT NULL,
+            clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ip_address TEXT,
+            user_agent TEXT,
             FOREIGN KEY (sent_email_id) REFERENCES sent_emails(id)
         )
     `);

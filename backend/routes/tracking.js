@@ -21,6 +21,26 @@ const TRACKING_PIXEL = Buffer.from(
     'base64'
 );
 
+// Helper functions to parse user agent
+function parseDeviceType(userAgent) {
+    if (/mobile|android|iphone|ipod|blackberry|iemobile|opera mini/i.test(userAgent)) {
+        return 'Mobile';
+    } else if (/tablet|ipad/i.test(userAgent)) {
+        return 'Tablet';
+    }
+    return 'Desktop';
+}
+
+function parseEmailClient(userAgent) {
+    if (/Gmail/i.test(userAgent)) return 'Gmail';
+    if (/Outlook/i.test(userAgent)) return 'Outlook';
+    if (/Apple Mail|Mail\/|AppleWebKit/i.test(userAgent)) return 'Apple Mail';
+    if (/Thunderbird/i.test(userAgent)) return 'Thunderbird';
+    if (/Yahoo/i.test(userAgent)) return 'Yahoo Mail';
+    if (/ProtonMail/i.test(userAgent)) return 'ProtonMail';
+    return 'Unknown';
+}
+
 /**
  * GET /api/track/open/:trackingId
  * Record email open and return tracking pixel
@@ -46,14 +66,29 @@ router.get('/open/:trackingId', (req, res) => {
         try {
             // Find the sent email
             const sentEmail = db.prepare(
-                'SELECT id FROM sent_emails WHERE tracking_id = ?'
+                'SELECT id, sent_at FROM sent_emails WHERE tracking_id = ?'
             ).get(trackingId);
 
             if (sentEmail) {
+                // Ignore opens within first 3 minutes after sending (email client pre-scans)
+                const sentTime = new Date(sentEmail.sent_at).getTime();
+                const now = Date.now();
+                const minutesSinceSent = (now - sentTime) / 1000 / 60;
+
+                if (minutesSinceSent < 3) {
+                    console.log(`🚫 Ignoring pre-scan open for: ${trackingId} (${minutesSinceSent.toFixed(1)}min after send)`);
+                    res.send(TRACKING_PIXEL);
+                    return;
+                }
+
                 const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
                 const userAgent = req.get('User-Agent') || 'unknown';
 
-                // Check if this is a duplicate within 5 minutes (prevent email client pre-fetches/auto-reloads)
+                // Parse device and email client from user agent
+                const deviceType = parseDeviceType(userAgent);
+                const emailClient = parseEmailClient(userAgent);
+
+                // Check if duplicate within 5 minutes
                 const recentOpen = db.prepare(`
                     SELECT id FROM email_opens
                     WHERE sent_email_id = ?
@@ -64,22 +99,23 @@ router.get('/open/:trackingId', (req, res) => {
                 if (!recentOpen) {
                     // Record the open
                     const insertOpen = db.prepare(`
-                        INSERT INTO email_opens (sent_email_id, tracking_id, ip_address, user_agent)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO email_opens (sent_email_id, tracking_id, ip_address, user_agent, device_type, email_client)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     `);
 
                     insertOpen.run(
                         sentEmail.id,
                         trackingId,
                         ipAddress,
-                        userAgent
+                        userAgent,
+                        deviceType,
+                        emailClient
                     );
 
-                    console.log(`📬 Email opened: ${trackingId}`);
+                    console.log(`📬 Email opened: ${trackingId} (${deviceType} - ${emailClient})`);
                 }
             }
         } catch (error) {
-            // Don't let tracking errors affect the response
             console.error('Error recording email open:', error.message);
         }
     });
@@ -119,12 +155,33 @@ router.get('/stats/:trackingId', (req, res) => {
         }
         
         const opens = db.prepare(`
-            SELECT opened_at, ip_address, user_agent
+            SELECT opened_at, ip_address, user_agent, device_type, email_client, country, city
             FROM email_opens
             WHERE tracking_id = ?
             ORDER BY opened_at DESC
         `).all(trackingId);
-        
+
+        // Calculate time to first open
+        let timeToOpen = null;
+        if (opens.length > 0) {
+            const sentTime = new Date(sentEmail.sent_at).getTime();
+            const firstOpenTime = new Date(opens[opens.length - 1].opened_at).getTime();
+            const minutesToOpen = Math.round((firstOpenTime - sentTime) / 1000 / 60);
+            timeToOpen = minutesToOpen;
+        }
+
+        // Device breakdown
+        const deviceBreakdown = opens.reduce((acc, o) => {
+            acc[o.device_type] = (acc[o.device_type] || 0) + 1;
+            return acc;
+        }, {});
+
+        // Email client breakdown
+        const clientBreakdown = opens.reduce((acc, o) => {
+            acc[o.email_client] = (acc[o.email_client] || 0) + 1;
+            return acc;
+        }, {});
+
         res.json({
             success: true,
             email: {
@@ -141,13 +198,20 @@ router.get('/stats/:trackingId', (req, res) => {
             },
             tracking: {
                 totalOpens: opens.length,
-                uniqueOpens: opens.length > 0 ? 1 : 0, // Each tracking ID is for one recipient
+                uniqueOpens: opens.length > 0 ? 1 : 0,
                 firstOpened: opens.length > 0 ? opens[opens.length - 1].opened_at : null,
                 lastOpened: opens.length > 0 ? opens[0].opened_at : null,
+                timeToOpen: timeToOpen,
+                deviceBreakdown: deviceBreakdown,
+                clientBreakdown: clientBreakdown,
                 opens: opens.map(o => ({
                     openedAt: o.opened_at,
                     ipAddress: o.ip_address,
-                    userAgent: o.user_agent
+                    userAgent: o.user_agent,
+                    deviceType: o.device_type,
+                    emailClient: o.email_client,
+                    country: o.country,
+                    city: o.city
                 }))
             }
         });
@@ -163,23 +227,60 @@ router.get('/stats/:trackingId', (req, res) => {
 
 /**
  * GET /api/track/summary
- * Get overall tracking summary
+ * Get overall tracking summary with analytics
  */
 router.get('/summary', (req, res) => {
     try {
         // Overall stats
         const overall = db.prepare(`
-            SELECT 
+            SELECT
                 COUNT(DISTINCT se.id) as total_sent,
                 COUNT(DISTINCT CASE WHEN eo.id IS NOT NULL THEN se.id END) as emails_opened,
                 COUNT(eo.id) as total_opens
             FROM sent_emails se
             LEFT JOIN email_opens eo ON se.id = eo.sent_email_id
         `).get();
-        
+
+        // Device breakdown
+        const deviceStats = db.prepare(`
+            SELECT device_type, COUNT(*) as count
+            FROM email_opens
+            GROUP BY device_type
+            ORDER BY count DESC
+        `).all();
+
+        // Email client breakdown
+        const clientStats = db.prepare(`
+            SELECT email_client, COUNT(*) as count
+            FROM email_opens
+            GROUP BY email_client
+            ORDER BY count DESC
+        `).all();
+
+        // Average time to open
+        const avgTimeToOpen = db.prepare(`
+            SELECT AVG(
+                (strftime('%s', eo.opened_at) - strftime('%s', se.sent_at)) / 60
+            ) as avg_minutes
+            FROM sent_emails se
+            JOIN email_opens eo ON se.id = eo.sent_email_id
+            WHERE eo.id IN (
+                SELECT MIN(id) FROM email_opens GROUP BY sent_email_id
+            )
+        `).get();
+
+        // Best open times (hour of day)
+        const openTimes = db.prepare(`
+            SELECT strftime('%H', opened_at) as hour, COUNT(*) as count
+            FROM email_opens
+            GROUP BY hour
+            ORDER BY count DESC
+            LIMIT 5
+        `).all();
+
         // Daily stats for the last 7 days
         const dailyStats = db.prepare(`
-            SELECT 
+            SELECT
                 DATE(se.sent_at) as date,
                 COUNT(DISTINCT se.id) as sent,
                 COUNT(DISTINCT CASE WHEN eo.id IS NOT NULL THEN se.id END) as opened
@@ -189,10 +290,10 @@ router.get('/summary', (req, res) => {
             GROUP BY DATE(se.sent_at)
             ORDER BY date DESC
         `).all();
-        
+
         // Top performing emails
         const topEmails = db.prepare(`
-            SELECT 
+            SELECT
                 se.subject,
                 COUNT(eo.id) as open_count,
                 se.sent_at
@@ -202,7 +303,7 @@ router.get('/summary', (req, res) => {
             ORDER BY open_count DESC
             LIMIT 5
         `).all();
-        
+
         res.json({
             success: true,
             summary: {
@@ -210,15 +311,19 @@ router.get('/summary', (req, res) => {
                     totalSent: overall.total_sent,
                     emailsOpened: overall.emails_opened,
                     totalOpens: overall.total_opens,
-                    openRate: overall.total_sent > 0 
+                    openRate: overall.total_sent > 0
                         ? ((overall.emails_opened / overall.total_sent) * 100).toFixed(2) + '%'
-                        : '0%'
+                        : '0%',
+                    avgTimeToOpen: avgTimeToOpen.avg_minutes ? Math.round(avgTimeToOpen.avg_minutes) : null
                 },
+                deviceBreakdown: deviceStats,
+                clientBreakdown: clientStats,
+                bestOpenTimes: openTimes,
                 dailyStats,
                 topPerforming: topEmails
             }
         });
-        
+
     } catch (error) {
         res.status(500).json({
             success: false,

@@ -101,23 +101,44 @@ async function showOpenDetails(trackingId) {
                 <p><strong>Sent:</strong> ${formatDate(email.sentAt)}</p>
             </div>
 
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px;">Summary</h3>
+                <p><strong>Total Opens:</strong> ${tracking.totalOpens}</p>
+                ${tracking.timeToOpen !== null ? `<p><strong>Time to First Open:</strong> ${tracking.timeToOpen} minutes</p>` : ''}
+                <p><strong>First Opened:</strong> ${tracking.firstOpened ? formatDate(tracking.firstOpened) : 'Not opened'}</p>
+                <p><strong>Last Opened:</strong> ${tracking.lastOpened ? formatDate(tracking.lastOpened) : 'Not opened'}</p>
+            </div>
+
+            ${tracking.totalOpens > 0 ? `
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px;">Device Breakdown</h3>
+                <p>${Object.entries(tracking.deviceBreakdown).map(([device, count]) => `${device}: ${count}`).join(', ')}</p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px;">Email Client Breakdown</h3>
+                <p>${Object.entries(tracking.clientBreakdown).map(([client, count]) => `${client}: ${count}`).join(', ')}</p>
+            </div>
+            ` : ''}
+
             <div>
-                <h3 style="margin-bottom: 10px;">Open Tracking (${tracking.totalOpens} opens)</h3>
+                <h3 style="margin-bottom: 10px;">Open History</h3>
         `;
 
         if (tracking.totalOpens === 0) {
             detailsHtml += '<p style="color: var(--text-muted);">This email has not been opened yet.</p>';
         } else {
             detailsHtml += '<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
-            detailsHtml += '<thead><tr style="border-bottom: 1px solid var(--border);"><th style="text-align: left; padding: 8px;">Opened At</th><th style="text-align: left; padding: 8px;">Device</th></tr></thead>';
+            detailsHtml += '<thead><tr style="border-bottom: 1px solid var(--border);"><th style="text-align: left; padding: 8px;">Opened At</th><th style="text-align: left; padding: 8px;">Device</th><th style="text-align: left; padding: 8px;">Client</th><th style="text-align: left; padding: 8px;">IP Address</th></tr></thead>';
             detailsHtml += '<tbody>';
 
             tracking.opens.forEach(open => {
-                const device = open.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop';
                 detailsHtml += `
                     <tr style="border-bottom: 1px solid var(--border-light);">
                         <td style="padding: 8px;">${formatDate(open.openedAt)}</td>
-                        <td style="padding: 8px;">${device}</td>
+                        <td style="padding: 8px;">${open.deviceType}</td>
+                        <td style="padding: 8px;">${open.emailClient}</td>
+                        <td style="padding: 8px; font-size: 12px;">${open.ipAddress}</td>
                     </tr>
                 `;
             });

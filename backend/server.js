@@ -59,16 +59,36 @@ app.use(session({
         secure: process.env.NODE_ENV === 'production', // HTTPS only in production
         httpOnly: true, // Prevent XSS attacks
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        sameSite: 'strict' // CSRF protection
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax' // Allow cross-origin in production
     }
 }));
 
-// CORS configuration
+// CORS configuration - Allow GitHub Pages
+const allowedOrigins = [
+    'https://bhavyee78.github.io',
+    'http://localhost:3000',
+    'http://localhost:5500',
+    process.env.CORS_ORIGIN
+].filter(Boolean);
+
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.warn(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true, // Allow cookies
-    methods: ['GET', 'POST', 'DELETE', 'PUT'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'DELETE', 'PUT', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
 
 // Parse JSON bodies

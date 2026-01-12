@@ -40,7 +40,7 @@ function renderTrackingStats(stats) {
 
 function renderTrackingTable(emails) {
     const tbody = document.getElementById('trackingTableBody');
-    
+
     if (emails.length === 0) {
         tbody.innerHTML = `
             <tr class="empty-row">
@@ -49,14 +49,14 @@ function renderTrackingTable(emails) {
         `;
         return;
     }
-    
+
     tbody.innerHTML = emails.map(email => {
         const statusClass = email.status === 'sent' ? 'status-sent' : 'status-failed';
         const openCount = email.tracking.openCount;
         const hasOpened = openCount > 0;
-        
+
         return `
-            <tr>
+            <tr onclick="showOpenDetails('${email.trackingId}')" style="cursor: pointer;" title="Click to view open details">
                 <td>
                     <strong>${escapeHtml(email.contact.firstName)} ${escapeHtml(email.contact.lastName)}</strong>
                 </td>
@@ -76,10 +76,104 @@ function renderTrackingTable(emails) {
                         ${openCount}
                     </span>
                 </td>
-                <td>${email.tracking.lastOpened ? formatDate(email.tracking.lastOpened) : '-'}</td>
+                <td>${email.tracking.lastOpened ? formatDate(email.tracking.lastOpened) : 'Not opened'}</td>
             </tr>
         `;
     }).join('');
+}
+
+async function showOpenDetails(trackingId) {
+    try {
+        const data = await API.get(`/track/stats/${trackingId}`);
+
+        if (!data.success) {
+            Toast.error('Failed to load details', data.error);
+            return;
+        }
+
+        const { email, tracking } = data;
+
+        let detailsHtml = `
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px;">Email Details</h3>
+                <p><strong>Recipient:</strong> ${escapeHtml(email.recipient.name)} (${escapeHtml(email.recipient.email)})</p>
+                <p><strong>Subject:</strong> ${escapeHtml(email.subject)}</p>
+                <p><strong>Sent:</strong> ${formatDate(email.sentAt)}</p>
+            </div>
+
+            <div>
+                <h3 style="margin-bottom: 10px;">Open Tracking (${tracking.totalOpens} opens)</h3>
+        `;
+
+        if (tracking.totalOpens === 0) {
+            detailsHtml += '<p style="color: var(--text-muted);">This email has not been opened yet.</p>';
+        } else {
+            detailsHtml += '<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
+            detailsHtml += '<thead><tr style="border-bottom: 1px solid var(--border);"><th style="text-align: left; padding: 8px;">Opened At</th><th style="text-align: left; padding: 8px;">Device</th></tr></thead>';
+            detailsHtml += '<tbody>';
+
+            tracking.opens.forEach(open => {
+                const device = open.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop';
+                detailsHtml += `
+                    <tr style="border-bottom: 1px solid var(--border-light);">
+                        <td style="padding: 8px;">${formatDate(open.openedAt)}</td>
+                        <td style="padding: 8px;">${device}</td>
+                    </tr>
+                `;
+            });
+
+            detailsHtml += '</tbody></table>';
+        }
+
+        detailsHtml += '</div>';
+
+        // Show modal (assuming you have a modal system)
+        showModal('Open Tracking Details', detailsHtml);
+
+    } catch (error) {
+        Toast.error('Failed to load details', error.message);
+    }
+}
+
+function showModal(title, content) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('trackingModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'trackingModal';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        `;
+        modal.innerHTML = `
+            <div style="background: white; border-radius: 8px; padding: 24px; max-width: 600px; max-height: 80vh; overflow-y: auto; position: relative;">
+                <button onclick="closeModal()" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                <div id="modalContent"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+    }
+
+    document.getElementById('modalContent').innerHTML = `<h2 style="margin-bottom: 20px;">${title}</h2>${content}`;
+    modal.style.display = 'flex';
+}
+
+function closeModal() {
+    const modal = document.getElementById('trackingModal');
+    if (modal) modal.style.display = 'none';
 }
 
 function renderTrackingPagination(pagination) {

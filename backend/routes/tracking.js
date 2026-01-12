@@ -24,14 +24,14 @@ const TRACKING_PIXEL = Buffer.from(
 /**
  * GET /api/track/open/:trackingId
  * Record email open and return tracking pixel
- * 
+ *
  * This endpoint is embedded as an image in every email.
  * When the recipient opens the email and images are loaded,
  * this endpoint is called, allowing us to track opens.
  */
 router.get('/open/:trackingId', (req, res) => {
     const { trackingId } = req.params;
-    
+
     // Always return the pixel first (user experience priority)
     res.set({
         'Content-Type': 'image/gif',
@@ -40,7 +40,7 @@ router.get('/open/:trackingId', (req, res) => {
         'Pragma': 'no-cache',
         'Expires': '0'
     });
-    
+
     // Record the open asynchronously (don't block response)
     setImmediate(() => {
         try {
@@ -48,29 +48,43 @@ router.get('/open/:trackingId', (req, res) => {
             const sentEmail = db.prepare(
                 'SELECT id FROM sent_emails WHERE tracking_id = ?'
             ).get(trackingId);
-            
+
             if (sentEmail) {
-                // Record the open
-                const insertOpen = db.prepare(`
-                    INSERT INTO email_opens (sent_email_id, tracking_id, ip_address, user_agent)
-                    VALUES (?, ?, ?, ?)
-                `);
-                
-                insertOpen.run(
-                    sentEmail.id,
-                    trackingId,
-                    req.ip || req.connection.remoteAddress || 'unknown',
-                    req.get('User-Agent') || 'unknown'
-                );
-                
-                console.log(`📬 Email opened: ${trackingId}`);
+                const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+                const userAgent = req.get('User-Agent') || 'unknown';
+
+                // Check if this is a duplicate within 30 seconds (prevent email client pre-fetches)
+                const recentOpen = db.prepare(`
+                    SELECT id FROM email_opens
+                    WHERE sent_email_id = ?
+                    AND ip_address = ?
+                    AND user_agent = ?
+                    AND opened_at > datetime('now', '-30 seconds')
+                `).get(sentEmail.id, ipAddress, userAgent);
+
+                if (!recentOpen) {
+                    // Record the open
+                    const insertOpen = db.prepare(`
+                        INSERT INTO email_opens (sent_email_id, tracking_id, ip_address, user_agent)
+                        VALUES (?, ?, ?, ?)
+                    `);
+
+                    insertOpen.run(
+                        sentEmail.id,
+                        trackingId,
+                        ipAddress,
+                        userAgent
+                    );
+
+                    console.log(`📬 Email opened: ${trackingId}`);
+                }
             }
         } catch (error) {
             // Don't let tracking errors affect the response
             console.error('Error recording email open:', error.message);
         }
     });
-    
+
     res.send(TRACKING_PIXEL);
 });
 
